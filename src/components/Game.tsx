@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import styled from 'styled-components';
 import { Artist as ImportedArtist, artists as artistData } from '../data/artists';
 import jazzTentImage from '../assets/tent-jazz.png';
@@ -39,11 +39,6 @@ type Direction = 'up' | 'down' | 'left' | 'right';
 
 interface Artist extends ImportedArtist {
   isCollected: boolean;
-}
-
-interface Dialogue {
-  text: string;
-  speaker: string;
 }
 
 interface ArtistImageProps {
@@ -271,11 +266,6 @@ const ArtistName = styled.div`
   margin-bottom: 5px;
 `;
 
-const ArtistEmoji = styled.div`
-  font-size: 32px;
-  margin-bottom: 10px;
-`;
-
 const RestartButton = styled.button`
   background: #f1c40f;
   color: #000;
@@ -484,7 +474,6 @@ const Game: React.FC = () => {
 
   const [characterPosition, setCharacterPosition] = useState<CharacterPosition>({ x: 300, y: 400 });
   const [characterDirection, setCharacterDirection] = useState<Direction>('down');
-  const [isMoving, setIsMoving] = useState(false);
   const [showCompletion, setShowCompletion] = useState(false);
   const [currentGenre, setCurrentGenre] = useState<string | null>(null);
   const [isInDialogue, setIsInDialogue] = useState(false);
@@ -528,10 +517,10 @@ const Game: React.FC = () => {
     }
   };
 
-  const getCurrentArtist = () => {
+  const getCurrentArtist = useCallback(() => {
     if (!currentGenre) return null;
     return artists.find(artist => artist.genre === currentGenre);
-  };
+  }, [currentGenre, artists]);
 
   const getCurrentDialogue = () => {
     const artist = getCurrentArtist();
@@ -546,7 +535,7 @@ const Game: React.FC = () => {
     };
   };
 
-  const handleKeyPress = (e: KeyboardEvent) => {
+  const handleKeyPress = useCallback((e: KeyboardEvent) => {
     if (!isInDialogue || !currentGenre) return;
     if (showTrivia) return;
 
@@ -568,7 +557,7 @@ const Game: React.FC = () => {
         setDialogueIndex(prev => prev + 1);
       }
     }
-  };
+  }, [isInDialogue, currentGenre, showTrivia, dialogueIndex, getCurrentArtist]);
 
   const handleTriviaAnswer = (answerIndex: number) => {
     setSelectedAnswer(answerIndex);
@@ -592,8 +581,8 @@ const Game: React.FC = () => {
     }, 2000);
   };
 
-  const checkArtistProximity = (x: number, y: number) => {
-    const nearbyArtist = artists.find(artist => {
+  const checkArtistProximity = useCallback((x: number, y: number) => {
+    return artists.find(artist => {
       const tent = tents.find(t => t.genre === artist.genre);
       if (!tent || tent.islocked) return false;
       
@@ -605,19 +594,18 @@ const Game: React.FC = () => {
       );
       return distance < 100;
     });
-    return nearbyArtist;
-  };
+  }, [artists, tents]);
 
-  const checkTentProximity = (x: number, y: number) => {
+  const checkTentProximity = useCallback((x: number, y: number) => {
     const nearby = tents.find(tent => {
       const distance = Math.sqrt(
         Math.pow(x - (tent.x + 32), 2) + 
         Math.pow(y - (tent.y + 32), 2)
       );
-      return distance < 100;  // Increased the detection radius
+      return distance < 100;
     });
     return nearby !== null;
-  };
+  }, [tents]);
 
   const checkBeethovenProximity = (x: number, y: number) => {
     const beethovenX = 400; // Center of screen
@@ -652,27 +640,6 @@ const Game: React.FC = () => {
     }
     return false; // Allow movement in front of Beethoven
   };
-
-  const collidesWithArtist = artists.some(artist => {
-    const tent = tents.find(t => t.genre === artist.genre);
-    if (!tent || tent.islocked) return false;
-
-    const artistLeft = tent.x + 140;
-    const artistRight = tent.x + 140 + 32; // Reduced from 48
-    const artistTop = tent.y + 20;
-    const artistBottom = tent.y + 20 + 48; // Reduced from 64
-    const charLeft = characterPosition.x;
-    const charRight = characterPosition.x + 32;
-    const charTop = characterPosition.y;
-    const charBottom = characterPosition.y + 32;
-
-    return !(
-      charRight < artistLeft ||
-      charLeft > artistRight ||
-      charBottom < artistTop ||
-      charTop > artistBottom
-    );
-  });
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -754,28 +721,7 @@ const Game: React.FC = () => {
         );
       });
 
-      const collidesWithArtist = artists.some(artist => {
-        const tent = tents.find(t => t.genre === artist.genre);
-        if (!tent || tent.islocked) return false;
-
-        const artistLeft = tent.x + 140;
-        const artistRight = tent.x + 140 + 32; // Reduced from 48
-        const artistTop = tent.y + 20;
-        const artistBottom = tent.y + 20 + 48; // Reduced from 64
-        const charLeft = newX;
-        const charRight = newX + 32;
-        const charTop = newY;
-        const charBottom = newY + 32;
-
-        return !(
-          charRight < artistLeft ||
-          charLeft > artistRight ||
-          charBottom < artistTop ||
-          charTop > artistBottom
-        );
-      });
-
-      if (!collidesWithTent && !collidesWithArtist && !collidesWithBeethoven(newX, newY)) {
+      if (!collidesWithTent && !collidesWithBeethoven(newX, newY)) {
         setCharacterPosition({ x: newX, y: newY });
         setCharacterDirection(newDirection);
       }
@@ -783,15 +729,14 @@ const Game: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [characterPosition, characterDirection, tents, isInDialogue, dialogueIndex, currentGenre, showBeethovenDialogue, beethovenDialogueIndex, nearBeethoven]);
+  }, [characterPosition, characterDirection, tents, isInDialogue, dialogueIndex, currentGenre, showBeethovenDialogue, beethovenDialogueIndex, nearBeethoven, artists, beethovenDialogue.length, checkArtistProximity, handleKeyPress]);
 
-  // Also check proximity whenever character position changes
   useEffect(() => {
     checkTentProximity(characterPosition.x, characterPosition.y);
     checkBeethovenProximity(characterPosition.x, characterPosition.y);
     const nearbyArtist = checkArtistProximity(characterPosition.x, characterPosition.y);
     setNearbyArtist(nearbyArtist || null);
-  }, [characterPosition]);
+  }, [characterPosition, checkArtistProximity, checkTentProximity]);
 
   const renderTent = (tent: Tent, index: number) => {
     const styledProps: StyledTentProps = {
